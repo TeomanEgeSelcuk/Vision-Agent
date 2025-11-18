@@ -1,0 +1,36 @@
+name: vision-agent
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - pip
+
+  - pip:
+      # --- OpenRouter & OpenAI-compatible clients ---
+      - openrouter           # Official OpenRouter Python SDK
+      - openai               # OpenAI SDK, used with OpenRouter's OpenAI-compatible endpoint
+
+      # --- LangChain ecosystem ---
+      - langchain            # Meta package; pulls in core framework
+      - langchain-core
+      - langchain-community
+      - langchain-openai>=0.3.9   # OpenAI integration used with OpenRouter
+      - langchain-tavily          # Official Tavily–LangChain integration
+
+      # --- Web search SDK ---
+      - tavily-python            # Direct Python SDK for Tavily Search API
+
+      # --- Image handling / preprocessing ---
+      - pillow                   # Basic image loading/manipulation
+      - pillow-avif-plugin       # AVIF format support for Pillow
+      - opencv-python            # More advanced image ops & camera handling
+
+      # --- General utilities ---
+      - pydantic                 # Data validation / typed configs
+      - python-dotenv            # Load .env with API keys, config
+      - requests                 # HTTP client; useful alongside openrouter/openai
+      - httpx                    # Async-capable HTTP client
+      - tqdm                     # Progress bars
+      - rich                     # Nice CLI logging/output

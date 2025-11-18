@@ -44,4 +44,16 @@ dependencies:
       - notebook                 # Jupyter Notebook server
       - ipykernel                # IPython kernel for Jupyter
       - jupyterlab               # Modern notebook/lab UI
+      - nbconvert                # Convert notebooks to PDF, HTML, etc.
+      # -- webpdf exporter for HTML-to-PDF conversion using headless Chromium
+      - nbconvert[webpdf]
+      - pyppeteer                # Chromium headless backend used by nbconvert[webpdf]
       - pytest                   # Test runner
+      - playwright                # For browser automation in notebooks
+      
+      # --- Visualization & Reporting ---
+      - matplotlib               # Plotting library
+      - seaborn                  # Statistical visualization
+      - plotly                   # Interactive plots
+      - pandas                   # Data manipulation and analysis
+      - ipywidgets               # Interactive widgets for notebooks

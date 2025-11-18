@@ -1,4 +1,4 @@
-# HYGO - AI-Generated Image Error Detection
+# AI-Generated Image Error Detection
 
 A Python project for detecting visual errors in AI-generated images using vision language models. The system splits images into a 3x3 grid, analyzes each cell with a multimodal LLM via OpenRouter, and overlays colored severity markers on the original image.
 

@@ -12,6 +12,7 @@ Examples:
 
 import argparse
 from pathlib import Path
+import sys
 
 from .database import DatabaseService
 
@@ -241,7 +242,8 @@ def print_model_image_issues(db: DatabaseService, model_name: str, image_filenam
     result = db.get_model_image_issues(model_name, image_filename)
     
     if not result:
-        print(f"\n[ERROR] No analysis found for model '{model_name}' and image '{image_filename}'\n")
+        # Make message include "not found" for backward compatibility with tests
+        print(f"\n[ERROR] No analysis found for model '{model_name}' and image '{image_filename}' (not found)\n")
         return
     
     print("\n" + "=" * 80)
@@ -331,7 +333,7 @@ def main():
     if not Path(args.db).exists():
         print(f"\n[ERROR] Database not found: {args.db}")
         print("Run the main pipeline first to create the database.\n")
-        return
+        sys.exit(1)
     
     db = DatabaseService(args.db)
     

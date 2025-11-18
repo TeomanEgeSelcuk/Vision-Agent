@@ -19,7 +19,7 @@ from sqlalchemy import (
     ForeignKey,
     Boolean,
 )
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import json
 
@@ -143,9 +143,38 @@ class DatabaseService:
         Args:
             db_path: Path to SQLite database file
         """
-        self.engine = create_engine(f"sqlite:///{db_path}", echo=False)
+        # Use NullPool to avoid persistent connections that can keep file handles open on Windows
+        from sqlalchemy.pool import NullPool
+        self.engine = create_engine(
+            f"sqlite:///{db_path}",
+            echo=False,
+            connect_args={"check_same_thread": False},
+            poolclass=NullPool,
+        )
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
+        # Track db path for debugging / cleanup
+        self._db_path = db_path
+
+    def close(self):
+        """
+        Dispose of Engine bindings and release file handles.
+        Call this when you're done with the DatabaseService to ensure resources are released
+        and files can be removed on Windows during test teardown.
+        """
+        try:
+            # Dispose engine to release SQLite file locks
+            if getattr(self, 'engine', None) is not None:
+                self.engine.dispose()
+        except Exception:
+            pass
+
+    def __del__(self):
+        """Best-effort cleanup: dispose engine on object deletion."""
+        try:
+            self.close()
+        except Exception:
+            pass
     
     def get_or_create_dataset(self, name: str, category: str) -> int:
         """

@@ -61,3 +61,44 @@ Given your current dataset and goal, we can simplify the original “pose / OCR 
 
 ---
 
+Additional implementation notes (updated to match current codebase):
+
+5. **Database Integration & Tracking**
+
+   * The pipeline now records results to an SQLite database using `DatabaseService`.
+   * The database stores these entities: `Dataset`, `OriginalImage`, `ModelTest`, `ImageAnalysis`, and `CellResult`.
+   * Before processing, the pipeline creates or finds dataset records for `correct-ai-images` and `faulty-ai-images` with `get_or_create_dataset()`.
+   * Each model test is recorded with `start_model_test()` and closed with `complete_model_test()`; this supports both regular runs and TEST_ALL mode.
+   * Image analyses are saved via `save_analysis()`. Running the same image with the same model replaces (upserts) the existing analysis.
+
+6. **TEST_ALL Mode**
+
+   * When `TEST_ALL=true` in `.env`, `main` obtains a list of vision-capable models via `get_all_fallback_models()` and runs the pipeline with each in turn.
+   * The pipeline prints the list of models and creates a `ModelTest` entry for each model run so results can be compared later.
+   * Outputs are organized by model as separate annotated images and recorded under the corresponding `ModelTest` record.
+
+7. **Pipeline orchestration**
+
+   * Key functions:
+     - `create_openrouter_client(api_key, referer, app_title)`: create a client with OpenRouter base_url.
+     - `validate_openrouter_api_key(api_key)`: validates API key (soft-fails for offline use).
+     - `collect_images(directory)`: returns sorted image files for processing.
+     - `process_single_image(...)`: orchestrates load → split → analyze → annotate → save → DB persist → print summary.
+     - `process_image_batch(...)`: loops over images with progress bar and error resilience.
+   * Output annotated images are saved under `output/<subdir>/` with the same filename, and the annotated path is stored in `ImageAnalysis.output_path`.
+
+8. **Query & Reporting**
+
+   * The repository includes `db_query.py` with reporting utilities like `print_summary()`, `print_model_comparison()`, `print_cell_heatmap()`, and `print_image_details()`.
+   * Use `python -m src.db_query --summary` to inspect stored results for quick verification.
+
+9. **Best Practices / Operational Notes**
+
+   * The pipeline handles API failures gracefully; failed region analyses are treated as zero issues so processing continues.
+   * Make sure `OPENROUTER_API_KEY` is set in `.env` (or offline mode will soft-fail if there is a network error).
+   * For consistent, repeatable runs, set `TEST_ALL=false` by default; set `TEST_ALL=true` for model-comparison sweeps.
+   * The `save_analysis()` method replaces previous analyses for the same image and model, ensuring the DB reflects the most recent run.
+   * Use `python -m src.main` to run the full pipeline and generate annotated outputs in `output/`.
+
+---
+

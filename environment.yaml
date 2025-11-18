@@ -5,6 +5,7 @@ channels:
 
 dependencies:
   - python=3.11
+  - sqlite
   - pip
 
   - pip:
@@ -34,3 +35,13 @@ dependencies:
       - httpx                    # Async-capable HTTP client
       - tqdm                     # Progress bars
       - rich                     # Nice CLI logging/output
+
+      # --- Database ---
+      - sqlalchemy               # ORM and database toolkit
+      - alembic                  # Database migrations
+
+      # --- Notebook / Interactive ---
+      - notebook                 # Jupyter Notebook server
+      - ipykernel                # IPython kernel for Jupyter
+      - jupyterlab               # Modern notebook/lab UI
+      - pytest                   # Test runner

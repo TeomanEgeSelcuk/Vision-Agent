@@ -67,12 +67,20 @@ def load_config(env_path: str = ".env") -> Dict[str, str]:
             "Set it to a vision-capable model name (e.g., openai/gpt-4o-mini)."
         )
     
+    # Get optional TEST_ALL flag
+    test_all = cfg.get("TEST_ALL", "false").lower() in ("true", "1", "yes")
+    
+    # Get database path with default
+    db_path = cfg.get("DATABASE_PATH", "hygo_results.db")
+    
     # Return validated config with defaults for optional fields
     return {
         "api_key": api_key,
         "model": model,
         "referer": cfg.get("OPENROUTER_HTTP_REFERER", "http://localhost"),
         "app_title": cfg.get("OPENROUTER_APP_TITLE", "hygo-vision-agent"),
+        "test_all": test_all,
+        "db_path": db_path,
     }
 
 

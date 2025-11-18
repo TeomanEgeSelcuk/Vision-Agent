@@ -6,7 +6,9 @@ Coordinates the complete image analysis workflow:
 2. Initialize OpenRouter client
 3. Process images from dataset folders
 4. Generate annotated outputs
+5. Store results in database
 
+Supports TEST_ALL mode to test all fallback models sequentially.
 Run from project root: python -m src.main
 """
 
@@ -15,9 +17,10 @@ from pathlib import Path
 from tqdm import tqdm
 
 from .config import load_config, validate_openrouter_api_key
-from .analyzer import create_openrouter_client, analyze_image_grid
+from .analyzer import create_openrouter_client, analyze_image_grid, get_all_fallback_models
 from .image_utils import collect_images, load_image, split_into_grid
 from .visualizer import create_annotated_image, print_analysis_summary
+from .database import DatabaseService
 
 
 # Dataset and output directory structure
@@ -34,6 +37,9 @@ def process_single_image(
     model: str,
     image_path: Path,
     output_dir: Path,
+    db_service: DatabaseService = None,
+    dataset_id: int = None,
+    model_test_id: int = None,
 ) -> None:
     """
     Complete analysis pipeline for a single image.
@@ -44,7 +50,8 @@ def process_single_image(
     3. Analyze each cell with LLM
     4. Draw grid and severity markers
     5. Save annotated image
-    6. Print summary
+    6. Store results in database
+    7. Print summary
     
     Time complexity: O(API_calls * API_latency + image_processing)
     Space complexity: O(image_size * num_crops)
@@ -54,6 +61,9 @@ def process_single_image(
         model: Model name to use for analysis
         image_path: Path to input image
         output_dir: Directory for output image
+        db_service: Optional database service for recording results
+        dataset_id: Optional dataset ID for database tracking
+        model_test_id: Optional model test ID for database tracking
     """
     # Load and prepare image - O(w*h)
     img = load_image(image_path)
@@ -74,6 +84,25 @@ def process_single_image(
     output_path = output_dir / image_path.name
     annotated.save(output_path)
     
+    # Record in database if service provided
+    if db_service and dataset_id and model_test_id:
+        # Get or create original image record
+        original_image_id = db_service.get_or_create_original_image(
+            dataset_id=dataset_id,
+            filename=image_path.name,
+            file_path=str(image_path.absolute()),
+            width=img.width,
+            height=img.height,
+        )
+        
+        # Save analysis results (replaces existing if present)
+        db_service.save_analysis(
+            original_image_id=original_image_id,
+            model_test_id=model_test_id,
+            output_path=str(output_path.absolute()),
+            cell_results=cell_results,
+        )
+    
     # Print summary to console
     print_analysis_summary(image_path.name, cell_results)
     print(f"  → Saved to: {output_path}")
@@ -85,6 +114,9 @@ def process_image_batch(
     image_paths: list,
     output_dir: Path,
     description: str,
+    db_service: DatabaseService = None,
+    dataset_id: int = None,
+    model_test_id: int = None,
 ) -> None:
     """
     Process a batch of images with progress tracking.
@@ -98,11 +130,22 @@ def process_image_batch(
         image_paths: List of image paths to process
         output_dir: Output directory for batch
         description: Description for progress bar
+        db_service: Optional database service for recording results
+        dataset_id: Optional dataset ID for database tracking
+        model_test_id: Optional model test ID for database tracking
     """
     # Use tqdm for progress tracking
     for img_path in tqdm(image_paths, desc=description):
         try:
-            process_single_image(client, model, img_path, output_dir)
+            process_single_image(
+                client,
+                model,
+                img_path,
+                output_dir,
+                db_service,
+                dataset_id,
+                model_test_id,
+            )
         except Exception as e:
             # Log error but continue with other images
             print(f"\nERROR processing {img_path.name}: {e}")
@@ -116,25 +159,38 @@ def main() -> None:
     Orchestrates complete workflow:
     - Configuration loading
     - API key validation
+    - Database initialization
     - Client initialization
-    - Batch processing of all images
+    - Batch processing of all images (or TEST_ALL mode)
     - Output organization
+    - Database recording
     """
     print("=" * 60)
     print("HYGO - AI Image Error Detection")
     print("=" * 60)
     
     # Load configuration from .env
-    print("\n[1/6] Loading configuration...")
+    print("\n[1/7] Loading configuration...")
     try:
         cfg = load_config()
         print(f"  [OK] Model: {cfg['model']}")
+        print(f"  [OK] TEST_ALL mode: {cfg['test_all']}")
+        print(f"  [OK] Database: {cfg['db_path']}")
     except Exception as e:
         print(f"  [ERROR] Configuration error: {e}")
         return
     
+    # Initialize database service
+    print("\n[2/7] Initializing database...")
+    try:
+        db_service = DatabaseService(cfg["db_path"])
+        print(f"  [OK] Database ready at {cfg['db_path']}")
+    except Exception as e:
+        print(f"  [ERROR] Database initialization error: {e}")
+        return
+    
     # Validate OpenRouter API key
-    print("\n[2/6] Validating OpenRouter API key...")
+    print("\n[3/7] Validating OpenRouter API key...")
     try:
         is_valid = validate_openrouter_api_key(cfg["api_key"])
         if not is_valid:
@@ -145,7 +201,7 @@ def main() -> None:
         return
     
     # Initialize OpenRouter client
-    print("\n[3/6] Initializing OpenRouter client...")
+    print("\n[4/7] Initializing OpenRouter client...")
     try:
         client = create_openrouter_client(
             cfg["api_key"],
@@ -158,7 +214,7 @@ def main() -> None:
         return
     
     # Collect images from dataset
-    print("\n[4/6] Scanning dataset directories...")
+    print("\n[5/7] Scanning dataset directories...")
     correct_dir = DATASET_ROOT / CORRECT_SUBDIR
     faulty_dir = DATASET_ROOT / FAULTY_SUBDIR
     
@@ -176,34 +232,88 @@ def main() -> None:
     print(f"  [OK] Found {len(faulty_images)} faulty images")
     print(f"  [OK] Total: {total_images} images")
     
-    # Process faulty images
-    if faulty_images:
-        print("\n[5/6] Processing faulty images...")
-        faulty_output = OUTPUT_ROOT / FAULTY_SUBDIR
-        process_image_batch(
-            client,
-            cfg["model"],
-            faulty_images,
-            faulty_output,
-            "Faulty images"
-        )
+    # Create dataset records in database
+    correct_dataset_id = db_service.get_or_create_dataset(CORRECT_SUBDIR, "correct")
+    faulty_dataset_id = db_service.get_or_create_dataset(FAULTY_SUBDIR, "faulty")
     
-    # Process correct images
-    if correct_images:
-        print("\n[6/6] Processing correct images...")
-        correct_output = OUTPUT_ROOT / CORRECT_SUBDIR
-        process_image_batch(
-            client,
-            cfg["model"],
-            correct_images,
-            correct_output,
-            "Correct images"
-        )
+    # Determine models to test
+    if cfg["test_all"]:
+        models_to_test = get_all_fallback_models()
+        print(f"\n  [TEST_ALL MODE] Testing {len(models_to_test)} models:")
+        for idx, model in enumerate(models_to_test, 1):
+            print(f"    {idx}. {model}")
+    else:
+        models_to_test = [cfg["model"]]
+    
+    # Process images with each model
+    step_num = 6
+    for model_idx, model in enumerate(models_to_test, 1):
+        if cfg["test_all"]:
+            print(f"\n[{step_num}/7] Testing model {model_idx}/{len(models_to_test)}: {model}")
+        else:
+            print(f"\n[{step_num}/7] Processing images with {model}...")
+        
+        # Start model test record
+        model_test_id = db_service.start_model_test(model, cfg["test_all"])
+        
+        try:
+            # Process faulty images
+            if faulty_images:
+                faulty_output = OUTPUT_ROOT / FAULTY_SUBDIR
+                if cfg["test_all"]:
+                    # Add model name to output path for TEST_ALL mode
+                    model_safe_name = model.replace("/", "_")
+                    faulty_output = faulty_output / model_safe_name
+                
+                process_image_batch(
+                    client,
+                    model,
+                    faulty_images,
+                    faulty_output,
+                    f"Faulty ({model})" if cfg["test_all"] else "Faulty images",
+                    db_service,
+                    faulty_dataset_id,
+                    model_test_id,
+                )
+            
+            # Process correct images
+            if correct_images:
+                correct_output = OUTPUT_ROOT / CORRECT_SUBDIR
+                if cfg["test_all"]:
+                    # Add model name to output path for TEST_ALL mode
+                    model_safe_name = model.replace("/", "_")
+                    correct_output = correct_output / model_safe_name
+                
+                process_image_batch(
+                    client,
+                    model,
+                    correct_images,
+                    correct_output,
+                    f"Correct ({model})" if cfg["test_all"] else "Correct images",
+                    db_service,
+                    correct_dataset_id,
+                    model_test_id,
+                )
+            
+            # Mark test as complete
+            db_service.complete_model_test(model_test_id)
+            
+        except Exception as e:
+            print(f"\n[ERROR] Failed processing with model {model}: {e}")
+            if not cfg["test_all"]:
+                # In single model mode, this is fatal
+                return
+            # In TEST_ALL mode, continue with next model
+            continue
     
     # Summary
+    print(f"\n[7/7] Complete!")
     print("\n" + "=" * 60)
     print("Analysis complete!")
     print(f"Annotated images saved to: {OUTPUT_ROOT}/")
+    print(f"Results stored in database: {cfg['db_path']}")
+    if cfg["test_all"]:
+        print(f"Tested {len(models_to_test)} models in TEST_ALL mode")
     print("=" * 60)
 
 

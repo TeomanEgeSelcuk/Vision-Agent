@@ -7,7 +7,7 @@ Optimized for clean visual output with minimal computational overhead.
 
 from typing import Dict, Any, Tuple
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from .image_utils import GRID_ROWS, GRID_COLS, get_cell_center
 from .analyzer import compute_severity
@@ -116,11 +116,13 @@ def draw_severity_marker(
     center_y: int,
     radius: int,
     severity: str,
+    issue_number: int = None,
 ) -> None:
     """
-    Draw a filled circle marker at specified location.
+    Draw a filled circle marker with optional number label at specified location.
     
     Uses ellipse with equal width/height for perfect circle.
+    If issue_number is provided, draws number in center of circle.
     Time complexity: O(1)
     Space complexity: O(1)
     
@@ -130,6 +132,7 @@ def draw_severity_marker(
         center_y: Y coordinate of marker center
         radius: Marker radius in pixels
         severity: Severity level ("mild" or "severe")
+        issue_number: Optional issue number to display in marker (1, 2, 3, etc.)
     """
     # Get color for severity level
     color = SEVERITY_COLORS.get(severity)
@@ -145,7 +148,43 @@ def draw_severity_marker(
     ]
     
     # Draw filled circle with outline for visibility
-    draw.ellipse(bbox, fill=color, outline=MARKER_OUTLINE_COLOR)
+    draw.ellipse(bbox, fill=color, outline=MARKER_OUTLINE_COLOR, width=2)
+    
+    # Draw issue number if provided
+    if issue_number is not None:
+        try:
+            # Try to use a TrueType font, fall back to default if not available
+            # Font size scales with radius for readability
+            font_size = max(8, int(radius * 1.2))
+            try:
+                # Try common font paths (works on Windows/Linux/Mac)
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except:
+                try:
+                    font = ImageFont.truetype("Arial.ttf", font_size)
+                except:
+                    try:
+                        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+                    except:
+                        # Fall back to default font
+                        font = ImageFont.load_default()
+        except:
+            font = ImageFont.load_default()
+        
+        # Draw number text centered in circle
+        text = str(issue_number)
+        
+        # Get text bounding box for centering
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        
+        # Calculate text position to center it
+        text_x = center_x - text_width // 2
+        text_y = center_y - text_height // 2
+        
+        # Draw text in black for visibility
+        draw.text((text_x, text_y), text, fill=(0, 0, 0), font=font)
 
 
 def create_annotated_image(
@@ -153,10 +192,10 @@ def create_annotated_image(
     cell_results: Dict[Tuple[int, int], Dict[str, Any]],
 ) -> Image.Image:
     """
-    Create annotated copy of image with grid and severity markers.
+    Create annotated copy of image with grid and numbered severity markers.
     
     Draws grid lines showing 3x3 cell boundaries and colored dots
-    indicating severity level of detected issues per cell.
+    with issue numbers indicating severity level of detected issues per cell.
     
     Time complexity: O(w*h) for image copy + O(GRID_ROWS*GRID_COLS) for markers
     Space complexity: O(w*h*3) for new image
@@ -180,7 +219,7 @@ def create_annotated_image(
     # Calculate marker size once - O(1)
     radius = calculate_marker_radius(w, h)
     
-    # Draw severity markers - O(GRID_ROWS * GRID_COLS)
+    # Draw severity markers with issue numbers - O(GRID_ROWS * GRID_COLS)
     for (row, col), result in cell_results.items():
         issue_count = result.get("issue_count", 0)
         
@@ -198,8 +237,8 @@ def create_annotated_image(
         # Get cell center coordinates - O(1)
         center_x, center_y = get_cell_center(row, col, w, h)
         
-        # Draw marker - O(1)
-        draw_severity_marker(draw, center_x, center_y, radius, severity)
+        # Draw marker with issue count number - O(1)
+        draw_severity_marker(draw, center_x, center_y, radius, severity, issue_count)
     
     return annotated
 

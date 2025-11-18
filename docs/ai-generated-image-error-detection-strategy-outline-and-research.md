@@ -101,7 +101,7 @@ Finally, to demonstrate this project, here's how you could set up the demo:
 - **Display the result:** Show the annotated image next to or below the original, with a caption or list of error descriptions. Each description can be numbered to match the markers on the image.
 - **User Interface for Demo:** Depending on context, this could be:
 - A **Jupyter Notebook** where you step through images one by one, showing the outputs. You can use Markdown cells to narrate and the notebook to show images with Matplotlib or PIL.
-- A **Streamlit or Gradio app** where the user can click through examples (or even upload their own image) and see the analysis. This makes it interactive - LangChain can be integrated in a backend to handle the analysis when a new image is uploaded.
+- A **Streamlit or Gradio app** where the user can click through examples (or even upload their own image) and see the analysis. This makes it interactive - LangChain can be integrated in a backend to handle the analysis when a new image isploaded.
 - Slides or a report with before/after images: If live demo is risky, prepare slides showing each image and the detected annotations, alongside your explanation text. For instance, slide 1: original vs highlighted image with bullet points of detected errors.
 - **Demonstrate Various Cases:** In the demo, show that the system works on all requested types:
 - **Portrait example:** highlight an anatomical error (e.g., extra finger). Explain: "The system marked this hand because it found six fingers[\[3\]](https://openaccess.thecvf.com/content/ICCV2025/papers/Zhou_AIGI-Holmes_Towards_Explainable_and_Generalizable_AI-Generated_Image_Detection_via_Multimodal_ICCV_2025_paper.pdf)."

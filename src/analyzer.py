@@ -251,3 +251,17 @@ def analyze_image_grid(
         results[(row, col)] = result
     
     return results
+
+
+def get_all_fallback_models() -> list:
+    """
+    Get complete list of fallback models for TEST_ALL mode.
+    
+    Returns all vision-capable models in price-ordered sequence.
+    Time complexity: O(1)
+    Space complexity: O(1)
+    
+    Returns:
+        List of model names
+    """
+    return CHEAP_VISION_MODELS.copy()
